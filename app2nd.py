@@ -2,82 +2,113 @@ import streamlit as st
 import requests
 import datetime
 import google.generativeai as genai
+import os
+from dotenv import load_dotenv
 from bs4 import BeautifulSoup
 
-# --- 環境変数読み込み（Cloud Secrets前提）
-GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
-genai.configure(api_key=GEMINI_API_KEY)
+# 環境変数読み込み
+load_dotenv()
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel("models/gemini-1.5-flash")
 
-# --- Wikipedia API：所属政党取得 + 衆/参判定
+# 国会議員データ取得
 @st.cache_data(ttl=86400)
-def fetch_politician_info(name):
-    url = "https://ja.wikipedia.org/wiki/" + requests.utils.quote(name)
-    resp = requests.get(url)
-    soup = BeautifulSoup(resp.text, "html.parser")
-    party = soup.find("th", string="所属政党")
-    chamber = soup.select_one("th:contains('所属') ~ td")
-    return {
-        "party": party.find_next_sibling("td").get_text(strip=True) if party else "不明",
-        "chamber": "参議院" if "参議院" in name or "参議院" in str(chamber) else "衆議院"
+def get_current_politicians():
+    urls = [
+        ("衆議院", "https://ja.wikipedia.org/wiki/日本の衆議院議員一覧"),
+        ("参議院", "https://ja.wikipedia.org/wiki/日本の参議院議員一覧")
+    ]
+    politicians = []
+    for house, url in urls:
+        res = requests.get(url)
+        soup = BeautifulSoup(res.content, "html.parser")
+        tables = soup.select("table.wikitable")
+        for table in tables:
+            for row in table.select("tr")[1:]:
+                cols = row.find_all("td")
+                if len(cols) >= 2:
+                    name = cols[0].text.strip().split('（')[0]
+                    party = cols[1].text.strip().split('（')[0]
+                    if name:
+                        politicians.append({"name": name, "party": party, "house": house})
+    return politicians
+
+# データ取得
+politicians = get_current_politicians()
+politician_names = sorted({p["name"] for p in politicians})
+party_names = sorted({p["party"] for p in politicians})
+
+# ヘッダー
+st.title("🧠 国会議員の発言分析 by 生成AI")
+st.markdown("議事録から該当発言をAIで分析し、政治家や政党の思想傾向を可視化します。")
+
+# 入力欄
+st.markdown("### 🎯 検索条件を設定")
+col1, col2 = st.columns(2)
+with col1:
+    selected_politician = st.selectbox("👤 国会議員を選択", [""] + politician_names)
+    manual_input = st.text_input("または名前を直接入力（例：河野太郎）")
+with col2:
+    selected_party = st.selectbox("🏛️ 政党を選択", [""] + party_names)
+    keyword = st.text_input("🗝️ キーワードを入力（例：防衛）")
+
+# 日付
+today = datetime.date.today()
+five_years_ago = today.replace(year=today.year - 5)
+from_date = st.date_input("開始日", value=five_years_ago)
+to_date = st.date_input("終了日", value=today)
+
+# ボタン
+if st.button("📡 検索して分析"):
+    st.info("検索中...")
+    speaker = manual_input if manual_input else selected_politician
+    base_url = "https://kokkai.ndl.go.jp/api/speech"
+    params = {
+        "speaker": speaker,
+        "party": selected_party if not speaker else None,
+        "any": keyword,
+        "from": from_date.strftime("%Y-%m-%d"),
+        "until": to_date.strftime("%Y-%m-%d"),
+        "recordPacking": "json",
+        "maximumRecords": 10,
+        "startRecord": 1,
     }
 
-# --- Wikipedia API：議員一覧取得
-@st.cache_data(ttl=86400)
-def fetch_politicians(house):
-    URL = "https://ja.wikipedia.org/w/api.php"
-    title = ("Category:Members_of_the_House_of_Representatives_(Japan)_2024–"
-             if house=="衆議院" else "Category:Members_of_the_Sangiin_(Japan)_2024–")
-    r = requests.get(URL, params={"action":"query","format":"json",
-                                  "list":"categorymembers","cmtitle":title,"cmlimit":"500"})
-    return sorted(m["title"] for m in r.json()["query"]["categorymembers"])
+    with st.spinner("国会議事録を検索中..."):
+        try:
+            response = requests.get(base_url, params={k: v for k, v in params.items() if v})
+            st.markdown(f"🔗 API送信URL： `{response.url}`")
 
-# --- UI
-st.title("🧩 国会議事録AI分析＋強化機能")
+            if response.status_code == 200:
+                data = response.json()
+                if data["numberOfRecords"] == 0:
+                    st.warning("該当する発言が見つかりませんでした。")
+                else:
+                    speeches = data.get("speechRecord", [])
+                    combined_text = "\n\n".join(
+                        [f"{s['speaker']}（{s['date']}）: {s['speech']}" for s in speeches]
+                    )
 
-house = st.sidebar.selectbox("議院を選択", ("衆議院", "参議院"))
-politicians = fetch_politicians(house)
-st.sidebar.write("または自由入力で議員名を入力")
-speaker = st.sidebar.selectbox("議員を選ぶ", options=politicians)
-custom = st.sidebar.text_input("または入力", "")
-speaker = custom.strip() or speaker
+                    prompt = (
+                        f"以下は日本の国会での発言の抜粋です。この政治家や政党が「{keyword}」に関してどのような思想や立場を持っているかを"
+                        f"200字以内で簡潔にまとめてください：\n\n{combined_text}"
+                    )
 
-keyword = st.text_input("検索キーワード（例：防衛）")
+                    with st.spinner("生成AIで分析中..."):
+                        result = model.generate_content(prompt)
+                        ai_summary = result.text
+                        st.subheader("🧠 生成AIによる分析結果")
+                        st.write(ai_summary)
 
-fd = datetime.date.today()
-td = fd.replace(year=fd.year-5)
-from_date = st.date_input("開始日", value=td, format="YYYY-MM-DD")
-to_date = st.date_input("終了日", value=fd, format="YYYY-MM-DD")
-
-if st.button("🔍 分析開始"):
-    info = fetch_politician_info(speaker)
-    st.write(f"**所属政党：{info['party']}／所属議院：{info['chamber']}**")
-
-    # API取得
-    resp = requests.get("https://kokkai.ndl.go.jp/api/speech", params={
-        "speaker": speaker, "any": keyword,
-        "from": from_date, "until": to_date,
-        "recordPacking":"json", "maximumRecords":10
-    })
-    st.markdown(f"`{resp.url}`")
-    recs = resp.json().get("speechRecord", [])
-    if not recs:
-        st.warning("発言なし")
-        st.stop()
-
-    # 要約（キーワード中心）
-    merged = "\n\n".join(f"{r['speech']}" for r in recs)
-    prompt = (f"以下の国会発言を「{keyword}」に関して3～5行で箇条書きにしてください。\n\n{merged}")
-    ai = model.generate_content(prompt).text.strip()
-    st.subheader("🧠 AI要約（キーワード中心）")
-    st.markdown(ai)
-
-    # 抜粋とリンク
-    st.subheader("📚 発言抜粋（キーワードハイライト付）")
-    for r in recs:
-        meta = f"{r['date']}／{r['nameOfMeeting']}・号数{r['issue']}"
-        text = r['speech'].replace(keyword, f"**<mark>{keyword}</mark>**")
-        st.markdown(f"**{meta}**")
-        st.markdown(text, unsafe_allow_html=True)
-        st.markdown(f"[🔗 会議録へ]({r['meetingURL']})")
-        st.markdown("---")
+                        st.subheader("📚 根拠となる発言抜粋")
+                        for s in speeches:
+                            highlighted = s["speech"].replace(keyword, f"**:orange[{keyword}]**")
+                            st.markdown(f"**{s['speaker']}（{s['date']}）**")
+                            st.markdown(f"会議名：{s.get('meeting', '不明')}")
+                            st.markdown(f"> {highlighted}")
+                            st.markdown(f"[🔗 会議録を見る]({s['meetingURL']})")
+                            st.markdown("---")
+            else:
+                st.error(f"❌ APIリクエスト失敗（status: {response.status_code}）\n\n{response.text}")
+        except Exception as e:
+            st.error(f"❌ エラー発生: {e}")
