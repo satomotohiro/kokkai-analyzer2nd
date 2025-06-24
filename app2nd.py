@@ -2,89 +2,82 @@ import streamlit as st
 import requests
 import datetime
 import google.generativeai as genai
-import os
-from dotenv import load_dotenv
+from bs4 import BeautifulSoup
 
-# 環境変数の読み込み
-load_dotenv()
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
-# Gemini APIの初期化
+# --- 環境変数読み込み（Cloud Secrets前提）
+GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel("models/gemini-1.5-flash")
 
-# タイトル
-st.title("国会議事録_AI分析")
+# --- Wikipedia API：所属政党取得 + 衆/参判定
+@st.cache_data(ttl=86400)
+def fetch_politician_info(name):
+    url = "https://ja.wikipedia.org/wiki/" + requests.utils.quote(name)
+    resp = requests.get(url)
+    soup = BeautifulSoup(resp.text, "html.parser")
+    party = soup.find("th", string="所属政党")
+    chamber = soup.select_one("th:contains('所属') ~ td")
+    return {
+        "party": party.find_next_sibling("td").get_text(strip=True) if party else "不明",
+        "chamber": "参議院" if "参議院" in name or "参議院" in str(chamber) else "衆議院"
+    }
 
-# 入力フォーム
-with st.form("search_form"):
-    speaker = st.text_input("政治家の名前（例：河野太郎）")
-    keyword = st.text_input("キーワード（例：防衛）")
+# --- Wikipedia API：議員一覧取得
+@st.cache_data(ttl=86400)
+def fetch_politicians(house):
+    URL = "https://ja.wikipedia.org/w/api.php"
+    title = ("Category:Members_of_the_House_of_Representatives_(Japan)_2024–"
+             if house=="衆議院" else "Category:Members_of_the_Sangiin_(Japan)_2024–")
+    r = requests.get(URL, params={"action":"query","format":"json",
+                                  "list":"categorymembers","cmtitle":title,"cmlimit":"500"})
+    return sorted(m["title"] for m in r.json()["query"]["categorymembers"])
 
-    today = datetime.date.today()
-    five_years_ago = today.replace(year=today.year - 5)
+# --- UI
+st.title("🧩 国会議事録AI分析＋強化機能")
 
-    from_date = st.date_input("国会議事録検索_開始日", value=five_years_ago, format="YYYY-MM-DD")
-    to_date = st.date_input("国会議事録検索_終了日", value=today, format="YYYY-MM-DD")
+house = st.sidebar.selectbox("議院を選択", ("衆議院", "参議院"))
+politicians = fetch_politicians(house)
+st.sidebar.write("または自由入力で議員名を入力")
+speaker = st.sidebar.selectbox("議員を選ぶ", options=politicians)
+custom = st.sidebar.text_input("または入力", "")
+speaker = custom.strip() or speaker
 
-    submitted = st.form_submit_button("検索して分析")
+keyword = st.text_input("検索キーワード（例：防衛）")
 
-# フォーム送信後の処理
-if submitted:
-    with st.spinner("国会議事録を検索中..."):
-        # APIのURL構築
-        base_url = "https://kokkai.ndl.go.jp/api/speech"
-        params = {
-            "speaker": speaker,
-            "any": keyword,
-            "from": from_date.strftime("%Y-%m-%d"),
-            "until": to_date.strftime("%Y-%m-%d"),
-            "recordPacking": "json",
-            "maximumRecords": 10,
-            "startRecord": 1,
-        }
+fd = datetime.date.today()
+td = fd.replace(year=fd.year-5)
+from_date = st.date_input("開始日", value=td, format="YYYY-MM-DD")
+to_date = st.date_input("終了日", value=fd, format="YYYY-MM-DD")
 
-        try:
-            response = requests.get(base_url, params=params)
-            st.markdown(f"🔗 APIに送信されたURL：\n\n`{response.url}`")
+if st.button("🔍 分析開始"):
+    info = fetch_politician_info(speaker)
+    st.write(f"**所属政党：{info['party']}／所属議院：{info['chamber']}**")
 
-            if response.status_code == 200:
-                data = response.json()
+    # API取得
+    resp = requests.get("https://kokkai.ndl.go.jp/api/speech", params={
+        "speaker": speaker, "any": keyword,
+        "from": from_date, "until": to_date,
+        "recordPacking":"json", "maximumRecords":10
+    })
+    st.markdown(f"`{resp.url}`")
+    recs = resp.json().get("speechRecord", [])
+    if not recs:
+        st.warning("発言なし")
+        st.stop()
 
-                if data["numberOfRecords"] == 0:
-                    st.warning("該当する発言が見つかりませんでした。")
-                else:
-                    # 発言をまとめてテキスト化
-                    speeches = data.get("speechRecord", [])
-                    combined_text = "\n\n".join(
-                        [f"{s['speaker']}（{s['date']}）: {s['speech']}" for s in speeches]
-                    )
-                    with st.spinner("生成AIで分析中..."):
-                        try:
-                            prompt = (
-                                f"以下は日本の国会での発言の抜粋です。\n\n"
-                                f"この政治家がこのテーマについてどのような考えを持っているかを、簡潔に3～5項目で箇条書きしてください。\n"
-                                f"1文あたり50文字以内で、明確な主張や論点を中心にまとめてください。\n"
-                                f"敬語や冗長な言い回しは避け、率直な分析を行ってください。\n\n"
-                                f"{combined_text}"
-                            )
-                            result = model.generate_content(prompt)
-                            ai_summary = result.text.strip()
-                    
-                            st.subheader("🧠 生成AIによる分析結果（簡潔要約）")
-                            st.markdown(ai_summary)
-                    
-                            st.subheader("📚 根拠となる発言抜粋")
-                            for s in speeches:
-                                st.markdown(f"**{s['speaker']}（{s['date']}）**")
-                                st.markdown(f"> {s['speech']}")
-                                st.markdown(f"[🔗 会議録を見る]({s['meetingURL']})")
-                                st.markdown("---")
-                    
-                        except Exception as e:
-                            st.error(f"❌ Gemini APIエラー: {e}")
-            else:
-                st.error(f"❌ APIリクエストに失敗しました（status: {response.status_code}）\n\n{response.text}")
+    # 要約（キーワード中心）
+    merged = "\n\n".join(f"{r['speech']}" for r in recs)
+    prompt = (f"以下の国会発言を「{keyword}」に関して3～5行で箇条書きにしてください。\n\n{merged}")
+    ai = model.generate_content(prompt).text.strip()
+    st.subheader("🧠 AI要約（キーワード中心）")
+    st.markdown(ai)
 
-        except Exception as e:
-            st.error(f"❌ エラーが発生しました: {e}")
+    # 抜粋とリンク
+    st.subheader("📚 発言抜粋（キーワードハイライト付）")
+    for r in recs:
+        meta = f"{r['date']}／{r['nameOfMeeting']}・号数{r['issue']}"
+        text = r['speech'].replace(keyword, f"**<mark>{keyword}</mark>**")
+        st.markdown(f"**{meta}**")
+        st.markdown(text, unsafe_allow_html=True)
+        st.markdown(f"[🔗 会議録へ]({r['meetingURL']})")
+        st.markdown("---")
