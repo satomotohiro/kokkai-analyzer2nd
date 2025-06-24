@@ -12,7 +12,10 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel("models/gemini-1.5-flash")
 
 # 国会議員データ読み込み
-politicians_df = pd.read_csv("politicians.csv")
+try:
+    politicians_df = pd.read_csv("politicians.csv", encoding="utf-8")
+except UnicodeDecodeError:
+    politicians_df = pd.read_csv("politicians.csv", encoding="shift_jis")
 politician_names = sorted(politicians_df["name"].unique())
 party_names = sorted(politicians_df["party"].dropna().unique())
 
