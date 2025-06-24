@@ -11,7 +11,7 @@ load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel("models/gemini-1.5-flash")
 
-# 国会議員データ読み込み（文字コード自動判定）
+# 国会議員データ読み込み
 try:
     politicians_df = pd.read_csv("politicians.csv", encoding="utf-8")
 except UnicodeDecodeError:
@@ -45,7 +45,7 @@ if st.button("📡 検索して分析"):
     st.info("検索中...")
     speaker = manual_input if manual_input else selected_politician
 
-    # 検索対象議員リスト作成
+    # 検索対象議員のリスト
     if speaker:
         speakers_to_search = [speaker]
     elif selected_party:
@@ -61,6 +61,7 @@ if st.button("📡 検索して分析"):
         st.warning("議員または政党を選択してください。")
         st.stop()
 
+    # 発言収集
     all_speeches = []
     base_url = "https://kokkai.ndl.go.jp/api/speech"
 
@@ -89,14 +90,16 @@ if st.button("📡 検索して分析"):
         st.warning("該当する発言が見つかりませんでした。")
         st.stop()
 
-    # ✅ 指定政党の発言だけに絞り込む（インデント修正済み）
+    # ✅ 政党フィルタ（安全に処理）
     filtered_speeches = []
-    for s in all_speeches:
-        speaker_group = s.get("speakerGroup", "")
-        party = s.get("party", "")
-        if selected_party in speaker_group or selected_party in party:
-            filtered_speeches.append(s)
-
+    if selected_party:
+        for s in all_speeches:
+            speaker_group = s.get("speakerGroup", "")
+            party = s.get("party", "")
+            if selected_party in speaker_group or selected_party in party:
+                filtered_speeches.append(s)
+    else:
+        filtered_speeches = all_speeches
 
     if not filtered_speeches:
         st.warning("指定した政党に一致する発言が見つかりませんでした。")
@@ -107,9 +110,9 @@ if st.button("📡 検索して分析"):
         [f"{s['speaker']}（{s['date']}）: {s['speech']}" for s in filtered_speeches]
     )
 
-    # プロンプト作成・AI分析
+    # プロンプト生成とAI解析
     prompt = (
-        f"以下は日本の国会での発言の抜粋です。この政治家たち（政党: {selected_party}）が「{keyword}」に関して"
+        f"以下は日本の国会での発言の抜粋です。この政治家たち（政党: {selected_party if selected_party else '不明'}）が「{keyword}」に関して"
         f"どのような思想や立場を持っているかを、200字以内で簡潔にまとめてください：\n\n{combined_text}"
     )
 
@@ -119,7 +122,7 @@ if st.button("📡 検索して分析"):
         st.subheader("🧠 生成AIによる分析結果")
         st.write(ai_summary)
 
-    # 発言表示
+    # 発言を表示
     st.subheader("📚 根拠となる発言抜粋")
     for s in filtered_speeches:
         highlighted = s["speech"].replace(keyword, f"**:orange[{keyword}]**")
