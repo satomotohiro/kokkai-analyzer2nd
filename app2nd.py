@@ -16,6 +16,7 @@ try:
     politicians_df = pd.read_csv("politicians.csv", encoding="utf-8")
 except UnicodeDecodeError:
     politicians_df = pd.read_csv("politicians.csv", encoding="shift_jis")
+
 politician_names = sorted(politicians_df["name"].unique())
 party_names = sorted(politicians_df["party"].dropna().unique())
 
@@ -33,7 +34,7 @@ with col2:
     selected_party = st.selectbox("🏛️ 政党を選択", [""] + party_names)
     keyword = st.text_input("🗝️ キーワードを入力（例：防衛）")
 
-# 日付
+# 日付指定
 today = datetime.date.today()
 five_years_ago = today.replace(year=today.year - 5)
 from_date = st.date_input("開始日", value=five_years_ago)
@@ -44,7 +45,7 @@ if st.button("📡 検索して分析"):
     st.info("検索中...")
     speaker = manual_input if manual_input else selected_politician
 
-    # 検索対象議員のリスト作成
+    # 検索対象議員リスト作成
     if speaker:
         speakers_to_search = [speaker]
     elif selected_party:
@@ -55,7 +56,7 @@ if st.button("📡 検索して分析"):
                 influential_members = party_members
         else:
             influential_members = party_members
-        speakers_to_search = influential_members["name"].tolist()[:5]  # 上位5名まで
+        speakers_to_search = influential_members["name"].tolist()[:5]
     else:
         st.warning("議員または政党を選択してください。")
         st.stop()
@@ -88,9 +89,19 @@ if st.button("📡 検索して分析"):
         st.warning("該当する発言が見つかりませんでした。")
         st.stop()
 
-    # 発言を連結
+    # ✅ 政党フィルタ：speakerGroup もしくは party キーで政党名一致チェック
+    filtered_speeches = [
+        s for s in all_speeches
+        if selected_party in s.get("speakerGroup", "") or selected_party in s.get("party", "")
+    ]
+
+    if not filtered_speeches:
+        st.warning("指定した政党に一致する発言が見つかりませんでした。")
+        st.stop()
+
+    # 発言を結合
     combined_text = "\n\n".join(
-        [f"{s['speaker']}（{s['date']}）: {s['speech']}" for s in all_speeches]
+        [f"{s['speaker']}（{s['date']}）: {s['speech']}" for s in filtered_speeches]
     )
 
     # プロンプト作成・AI分析
@@ -107,7 +118,7 @@ if st.button("📡 検索して分析"):
 
     # 発言表示
     st.subheader("📚 根拠となる発言抜粋")
-    for s in all_speeches:
+    for s in filtered_speeches:
         highlighted = s["speech"].replace(keyword, f"**:orange[{keyword}]**")
         st.markdown(f"**{s['speaker']}（{s['date']}）**")
         st.markdown(f"会議名：{s.get('meeting', '不明')}")
