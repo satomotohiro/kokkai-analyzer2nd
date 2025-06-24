@@ -90,10 +90,10 @@ if st.button("📡 検索して分析"):
         st.stop()
 
     # ✅ 政党フィルタ：speakerGroup もしくは party キーで政党名一致チェック
-    filtered_speeches = [
-        s for s in all_speeches
-        if selected_party in s.get("speakerGroup", "") or selected_party in s.get("party", "")
-    ]
+   filtered_speeches = [
+    s for s in all_speeches
+    if selected_party in s.get("speakerGroup", "") or selected_party in s.get("party", "")
+]
 
     if not filtered_speeches:
         st.warning("指定した政党に一致する発言が見つかりませんでした。")
