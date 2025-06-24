@@ -89,13 +89,14 @@ if st.button("📡 検索して分析"):
         st.warning("該当する発言が見つかりませんでした。")
         st.stop()
 
-    # ✅ 指定政党の発言だけに絞り込む
-   filtered_speeches = []
-for s in all_speeches:
-    speaker_group = s.get("speakerGroup", "")
-    party = s.get("party", "")
-    if selected_party in speaker_group or selected_party in party:
-        filtered_speeches.append(s)
+    # ✅ 指定政党の発言だけに絞り込む（インデント修正済み）
+    filtered_speeches = []
+    for s in all_speeches:
+        speaker_group = s.get("speakerGroup", "")
+        party = s.get("party", "")
+        if selected_party in speaker_group or selected_party in party:
+            filtered_speeches.append(s)
+
 
     if not filtered_speeches:
         st.warning("指定した政党に一致する発言が見つかりませんでした。")
