@@ -12,26 +12,12 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel("models/gemini-1.5-flash")
 
 # 国会議員データ取得
-@st.cache_data(ttl=86400)
-def get_current_politicians():
-    urls = [
-        ("衆議院", "https://ja.wikipedia.org/wiki/日本の衆議院議員一覧"),
-        ("参議院", "https://ja.wikipedia.org/wiki/日本の参議院議員一覧")
-    ]
-    politicians = []
-    for house, url in urls:
-        res = requests.get(url)
-        soup = BeautifulSoup(res.content, "html.parser")
-        tables = soup.select("table.wikitable")
-        for table in tables:
-            for row in table.select("tr")[1:]:
-                cols = row.find_all("td")
-                if len(cols) >= 2:
-                    name = cols[0].text.strip().split('（')[0]
-                    party = cols[1].text.strip().split('（')[0]
-                    if name:
-                        politicians.append({"name": name, "party": party, "house": house})
-    return politicians
+import pandas as pd
+
+politicians_df = pd.read_csv("politicians.csv")
+politician_names = sorted(politicians_df["name"].unique())
+party_names = sorted(politicians_df["party"].dropna().unique())
+
 
 # データ取得
 politicians = get_current_politicians()
