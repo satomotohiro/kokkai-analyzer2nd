@@ -4,16 +4,14 @@ import datetime
 import google.generativeai as genai
 import os
 from dotenv import load_dotenv
-from bs4 import BeautifulSoup
+import pandas as pd
 
 # 環境変数読み込み
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel("models/gemini-1.5-flash")
 
-# 国会議員データ取得
-import pandas as pd
-
+# 国会議員データ読み込み
 politicians_df = pd.read_csv("politicians.csv")
 politician_names = sorted(politicians_df["name"].unique())
 party_names = sorted(politicians_df["party"].dropna().unique())
@@ -38,57 +36,78 @@ five_years_ago = today.replace(year=today.year - 5)
 from_date = st.date_input("開始日", value=five_years_ago)
 to_date = st.date_input("終了日", value=today)
 
-# ボタン
+# 実行ボタン
 if st.button("📡 検索して分析"):
     st.info("検索中...")
     speaker = manual_input if manual_input else selected_politician
+
+    # 検索対象議員のリスト作成
+    if speaker:
+        speakers_to_search = [speaker]
+    elif selected_party:
+        party_members = politicians_df[politicians_df["party"] == selected_party]
+        if "position" in party_members.columns:
+            influential_members = party_members[party_members["position"].notna()]
+            if influential_members.empty:
+                influential_members = party_members
+        else:
+            influential_members = party_members
+        speakers_to_search = influential_members["name"].tolist()[:5]  # 上位5名まで
+    else:
+        st.warning("議員または政党を選択してください。")
+        st.stop()
+
+    all_speeches = []
     base_url = "https://kokkai.ndl.go.jp/api/speech"
-    params = {
-        "speaker": speaker,
-        "party": selected_party if not speaker else None,
-        "any": keyword,
-        "from": from_date.strftime("%Y-%m-%d"),
-        "until": to_date.strftime("%Y-%m-%d"),
-        "recordPacking": "json",
-        "maximumRecords": 10,
-        "startRecord": 1,
-    }
 
-    with st.spinner("国会議事録を検索中..."):
-        try:
-            response = requests.get(base_url, params={k: v for k, v in params.items() if v})
-            st.markdown(f"🔗 API送信URL： `{response.url}`")
+    for name in speakers_to_search:
+        params = {
+            "speaker": name,
+            "any": keyword,
+            "from": from_date.strftime("%Y-%m-%d"),
+            "until": to_date.strftime("%Y-%m-%d"),
+            "recordPacking": "json",
+            "maximumRecords": 5,
+            "startRecord": 1,
+        }
 
-            if response.status_code == 200:
-                data = response.json()
-                if data["numberOfRecords"] == 0:
-                    st.warning("該当する発言が見つかりませんでした。")
-                else:
+        with st.spinner(f"{name} の発言を取得中..."):
+            try:
+                response = requests.get(base_url, params=params)
+                if response.status_code == 200:
+                    data = response.json()
                     speeches = data.get("speechRecord", [])
-                    combined_text = "\n\n".join(
-                        [f"{s['speaker']}（{s['date']}）: {s['speech']}" for s in speeches]
-                    )
+                    all_speeches.extend(speeches)
+            except Exception as e:
+                st.error(f"{name} のデータ取得中にエラー: {e}")
 
-                    prompt = (
-                        f"以下は日本の国会での発言の抜粋です。この政治家や政党が「{keyword}」に関してどのような思想や立場を持っているかを"
-                        f"200字以内で簡潔にまとめてください：\n\n{combined_text}"
-                    )
+    if not all_speeches:
+        st.warning("該当する発言が見つかりませんでした。")
+        st.stop()
 
-                    with st.spinner("生成AIで分析中..."):
-                        result = model.generate_content(prompt)
-                        ai_summary = result.text
-                        st.subheader("🧠 生成AIによる分析結果")
-                        st.write(ai_summary)
+    # 発言を連結
+    combined_text = "\n\n".join(
+        [f"{s['speaker']}（{s['date']}）: {s['speech']}" for s in all_speeches]
+    )
 
-                        st.subheader("📚 根拠となる発言抜粋")
-                        for s in speeches:
-                            highlighted = s["speech"].replace(keyword, f"**:orange[{keyword}]**")
-                            st.markdown(f"**{s['speaker']}（{s['date']}）**")
-                            st.markdown(f"会議名：{s.get('meeting', '不明')}")
-                            st.markdown(f"> {highlighted}")
-                            st.markdown(f"[🔗 会議録を見る]({s['meetingURL']})")
-                            st.markdown("---")
-            else:
-                st.error(f"❌ APIリクエスト失敗（status: {response.status_code}）\n\n{response.text}")
-        except Exception as e:
-            st.error(f"❌ エラー発生: {e}")
+    # プロンプト作成・AI分析
+    prompt = (
+        f"以下は日本の国会での発言の抜粋です。この政治家たち（政党: {selected_party}）が「{keyword}」に関して"
+        f"どのような思想や立場を持っているかを、200字以内で簡潔にまとめてください：\n\n{combined_text}"
+    )
+
+    with st.spinner("生成AIで分析中..."):
+        result = model.generate_content(prompt)
+        ai_summary = result.text
+        st.subheader("🧠 生成AIによる分析結果")
+        st.write(ai_summary)
+
+    # 発言表示
+    st.subheader("📚 根拠となる発言抜粋")
+    for s in all_speeches:
+        highlighted = s["speech"].replace(keyword, f"**:orange[{keyword}]**")
+        st.markdown(f"**{s['speaker']}（{s['date']}）**")
+        st.markdown(f"会議名：{s.get('meeting', '不明')}")
+        st.markdown(f"> {highlighted}")
+        st.markdown(f"[🔗 会議録を見る]({s['meetingURL']})")
+        st.markdown("---")
