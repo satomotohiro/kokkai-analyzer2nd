@@ -11,7 +11,7 @@ load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel("models/gemini-1.5-flash")
 
-# 国会議員データ読み込み
+# 国会議員データ読み込み（文字コード自動判定）
 try:
     politicians_df = pd.read_csv("politicians.csv", encoding="utf-8")
 except UnicodeDecodeError:
@@ -89,11 +89,11 @@ if st.button("📡 検索して分析"):
         st.warning("該当する発言が見つかりませんでした。")
         st.stop()
 
-    # ✅ 政党フィルタ：speakerGroup もしくは party キーで政党名一致チェック
-   filtered_speeches = [
-    s for s in all_speeches
-    if selected_party in s.get("speakerGroup", "") or selected_party in s.get("party", "")
-]
+    # ✅ 指定政党の発言だけに絞り込む
+    filtered_speeches = [
+        s for s in all_speeches
+        if selected_party in s.get("speakerGroup", "") or selected_party in s.get("party", "")
+    ]
 
     if not filtered_speeches:
         st.warning("指定した政党に一致する発言が見つかりませんでした。")
