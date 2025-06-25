@@ -17,16 +17,15 @@ try:
 except UnicodeDecodeError:
     politicians_df = pd.read_csv("politicians.csv", encoding="shift_jis")
 
-# 名前整形（スペース除去）
+# 議員名正規化（スペース除去）
 def normalize_name(name):
     return name.replace("　", "").replace(" ", "") if name else ""
 
 politicians_df["name"] = politicians_df["name"].apply(normalize_name)
-
 politician_names = sorted(politicians_df["name"].unique())
 party_names = sorted(politicians_df["party"].dropna().unique())
 
-# UI
+# UIヘッダー
 st.title("🧠 国会議員の発言分析 by 生成AI")
 st.markdown("議事録から該当発言をAIで分析し、政治家や政党の思想傾向を可視化します。")
 
@@ -34,8 +33,12 @@ st.markdown("議事録から該当発言をAIで分析し、政治家や政党�
 st.markdown("### 🎯 検索条件を設定")
 col1, col2 = st.columns(2)
 with col1:
-    selected_politician = st.selectbox("👤 国会議員を選択", [""] + politician_names)
-    manual_input = st.text_input("または名前を直接入力（例：河野太郎）")
+    selected_politician_input = st.selectbox(
+        "👤 国会議員を選択または入力（例：河野太郎）",
+        [""] + politician_names,
+        index=0,
+        placeholder="議員名を選択または直接入力"
+    )
 with col2:
     selected_party = st.selectbox("🏛️ 政党を選択", [""] + party_names)
     keyword = st.text_input("🗝️ キーワードを入力（例：消費税）")
@@ -46,16 +49,14 @@ five_years_ago = today.replace(year=today.year - 5)
 from_date = st.date_input("開始日", value=five_years_ago)
 to_date = st.date_input("終了日", value=today)
 
-# 実行
+# 実行ボタン
 if st.button("📡 検索して分析"):
     st.info("検索中...")
 
-    # 名前整形
-    manual_input_clean = normalize_name(manual_input)
-    selected_politician_clean = normalize_name(selected_politician)
-    speaker = manual_input_clean if manual_input_clean else selected_politician_clean
+    # 入力整形
+    speaker = normalize_name(selected_politician_input)
 
-    # 検索対象の決定
+    # 検索対象を決定
     if speaker:
         speakers_to_search = [speaker]
     elif selected_party:
@@ -71,7 +72,7 @@ if st.button("📡 検索して分析"):
         st.warning("議員または政党を選択してください。")
         st.stop()
 
-    # 発言取得
+    # 国会議事録APIで発言を取得
     all_speeches = []
     base_url = "https://kokkai.ndl.go.jp/api/speech"
 
@@ -100,10 +101,10 @@ if st.button("📡 検索して分析"):
         st.warning("該当する発言が見つかりませんでした。")
         st.stop()
 
-    # 取得した発言をそのまま利用
+    # フィルタ不要、取得結果をそのまま利用
     filtered_speeches = all_speeches
 
-    # Gemini分析
+    # Geminiプロンプト生成
     combined_text = "\n\n".join(
         [f"{s['speaker']}（{s['date']}）: {s['speech']}" for s in filtered_speeches]
     )
