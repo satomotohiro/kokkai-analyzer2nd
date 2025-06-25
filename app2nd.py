@@ -26,7 +26,7 @@ politician_names = sorted(politicians_df["name"].unique())
 party_names = sorted(politicians_df["party"].dropna().unique())
 
 # UIヘッダー
-st.title("🧠 国会議員の発言分析 by 生成AI")
+st.title("🤖 国会議員の発言分析 by 生成AI")
 st.markdown("議事録から該当発言をAIで分析し、政治家や政党の思想傾向を可視化します。")
 
 # 入力欄
