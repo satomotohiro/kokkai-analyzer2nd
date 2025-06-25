@@ -120,13 +120,21 @@ if st.button("📡 検索して分析"):
         st.subheader("🧠 生成AIによる分析結果")
         st.write(ai_summary)
 
-    # 発言表示
-    st.subheader("📚 根拠となる発言抜粋")
-    for s in filtered_speeches:
-        highlighted = s["speech"].replace(keyword, f"**:orange[{keyword}]**")
-        meeting_name = s.get("nameOfMeeting") or s.get("meeting") or "不明"
-        st.markdown(f"**{s['speaker']}（{s['date']}）**")
-        st.markdown(f"会議名：{meeting_name}")
-        st.markdown(f"> {highlighted}")
-        st.markdown(f"[🔗 会議録を見る]({s['meetingURL']})")
-        st.markdown("---")
+   # 発言表示（所属院付き）
+　st.subheader("📚 根拠となる発言抜粋")
+　for s in filtered_speeches:
+    　highlighted = s["speech"].replace(keyword, f"**:orange[{keyword}]**")
+    　meeting_name = s.get("nameOfMeeting") or s.get("meeting") or "不明"
+    
+    　# 所属院の取得
+    　speaker_name = normalize_name(s['speaker'])
+    　house = politicians_df.loc[politicians_df["name"] == speaker_name, "house"].values
+    　house_str = house[0] if len(house) > 0 else "所属院不明"
+
+    　# 表示
+   　 st.markdown(f"**{s['speaker']}（{s['date']}／{house_str}）**")
+    　st.markdown(f"会議名：{meeting_name}")
+    　st.markdown(f"> {highlighted}")
+    　st.markdown(f"[🔗 会議録を見る]({s['meetingURL']})")
+    　st.markdown("---")
+
