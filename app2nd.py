@@ -17,7 +17,7 @@ try:
 except UnicodeDecodeError:
     politicians_df = pd.read_csv("politicians.csv", encoding="shift_jis")
 
-# 名前リストの整備
+# 名前整形（スペース除去）
 def normalize_name(name):
     return name.replace("　", "").replace(" ", "") if name else ""
 
@@ -26,7 +26,7 @@ politicians_df["name"] = politicians_df["name"].apply(normalize_name)
 politician_names = sorted(politicians_df["name"].unique())
 party_names = sorted(politicians_df["party"].dropna().unique())
 
-# UIヘッダー
+# UI
 st.title("🧠 国会議員の発言分析 by 生成AI")
 st.markdown("議事録から該当発言をAIで分析し、政治家や政党の思想傾向を可視化します。")
 
@@ -40,22 +40,22 @@ with col2:
     selected_party = st.selectbox("🏛️ 政党を選択", [""] + party_names)
     keyword = st.text_input("🗝️ キーワードを入力（例：消費税）")
 
-# 日付入力
+# 日付
 today = datetime.date.today()
 five_years_ago = today.replace(year=today.year - 5)
 from_date = st.date_input("開始日", value=five_years_ago)
 to_date = st.date_input("終了日", value=today)
 
-# 実行ボタン
+# 実行
 if st.button("📡 検索して分析"):
     st.info("検索中...")
 
-    # 入力名を整形
+    # 名前整形
     manual_input_clean = normalize_name(manual_input)
     selected_politician_clean = normalize_name(selected_politician)
     speaker = manual_input_clean if manual_input_clean else selected_politician_clean
 
-    # 検索対象議員リストの構築
+    # 検索対象の決定
     if speaker:
         speakers_to_search = [speaker]
     elif selected_party:
@@ -71,7 +71,7 @@ if st.button("📡 検索して分析"):
         st.warning("議員または政党を選択してください。")
         st.stop()
 
-    # 国会APIで発言取得
+    # 発言取得
     all_speeches = []
     base_url = "https://kokkai.ndl.go.jp/api/speech"
 
@@ -100,15 +100,14 @@ if st.button("📡 検索して分析"):
         st.warning("該当する発言が見つかりませんでした。")
         st.stop()
 
-    # ✅ フィルタ処理を削除（取得したものをそのまま使用）
+    # 取得した発言をそのまま利用
     filtered_speeches = all_speeches
 
-    # 発言を連結
+    # Gemini分析
     combined_text = "\n\n".join(
         [f"{s['speaker']}（{s['date']}）: {s['speech']}" for s in filtered_speeches]
     )
 
-    # Gemini へプロンプト生成
     prompt = (
         f"以下は日本の国会での発言の抜粋です。この政治家たち（政党: {selected_party if selected_party else '不明'}）が「{keyword}」に関して"
         f"どのような思想や立場を持っているかを、200字以内で簡潔にまとめてください：\n\n{combined_text}"
@@ -124,8 +123,9 @@ if st.button("📡 検索して分析"):
     st.subheader("📚 根拠となる発言抜粋")
     for s in filtered_speeches:
         highlighted = s["speech"].replace(keyword, f"**:orange[{keyword}]**")
+        meeting_name = s.get("nameOfMeeting") or s.get("meeting") or "不明"
         st.markdown(f"**{s['speaker']}（{s['date']}）**")
-        st.markdown(f"会議名：{s.get('meeting', '不明')}")
+        st.markdown(f"会議名：{meeting_name}")
         st.markdown(f"> {highlighted}")
         st.markdown(f"[🔗 会議録を見る]({s['meetingURL']})")
         st.markdown("---")
