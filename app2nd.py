@@ -17,7 +17,7 @@ try:
 except UnicodeDecodeError:
     politicians_df = pd.read_csv("politicians.csv", encoding="shift_jis")
 
-# 議員名正規化（スペース除去）
+# 議員名整形（スペース除去）
 def normalize_name(name):
     return name.replace("　", "").replace(" ", "") if name else ""
 
@@ -53,7 +53,7 @@ to_date = st.date_input("終了日", value=today)
 if st.button("📡 検索して分析"):
     st.info("検索中...")
 
-    # 入力整形
+    # 議員名整形
     speaker = normalize_name(selected_politician_input)
 
     # 検索対象を決定
@@ -72,7 +72,7 @@ if st.button("📡 検索して分析"):
         st.warning("議員または政党を選択してください。")
         st.stop()
 
-    # 国会議事録APIで発言を取得
+    # 国会APIで発言検索
     all_speeches = []
     base_url = "https://kokkai.ndl.go.jp/api/speech"
 
@@ -101,12 +101,9 @@ if st.button("📡 検索して分析"):
         st.warning("該当する発言が見つかりませんでした。")
         st.stop()
 
-    # フィルタ不要、取得結果をそのまま利用
-    filtered_speeches = all_speeches
-
     # Geminiプロンプト生成
     combined_text = "\n\n".join(
-        [f"{s['speaker']}（{s['date']}）: {s['speech']}" for s in filtered_speeches]
+        [f"{s['speaker']}（{s['date']}）: {s['speech']}" for s in all_speeches]
     )
 
     prompt = (
@@ -120,21 +117,19 @@ if st.button("📡 検索して分析"):
         st.subheader("🧠 生成AIによる分析結果")
         st.write(ai_summary)
 
-   # 発言表示（所属院付き）
-　st.subheader("📚 根拠となる発言抜粋")
-　for s in filtered_speeches:
-    　highlighted = s["speech"].replace(keyword, f"**:orange[{keyword}]**")
-    　meeting_name = s.get("nameOfMeeting") or s.get("meeting") or "不明"
-    
-    　# 所属院の取得
-    　speaker_name = normalize_name(s['speaker'])
-    　house = politicians_df.loc[politicians_df["name"] == speaker_name, "house"].values
-    　house_str = house[0] if len(house) > 0 else "所属院不明"
+    # 発言表示（所属院付き）
+    st.subheader("📚 根拠となる発言抜粋")
+    for s in all_speeches:
+        highlighted = s["speech"].replace(keyword, f"**:orange[{keyword}]**")
+        meeting_name = s.get("nameOfMeeting") or s.get("meeting") or "不明"
 
-    　# 表示
-   　 st.markdown(f"**{s['speaker']}（{s['date']}／{house_str}）**")
-    　st.markdown(f"会議名：{meeting_name}")
-    　st.markdown(f"> {highlighted}")
-    　st.markdown(f"[🔗 会議録を見る]({s['meetingURL']})")
-    　st.markdown("---")
+        # 所属院取得
+        speaker_name = normalize_name(s["speaker"])
+        house = politicians_df.loc[politicians_df["name"] == speaker_name, "house"].values
+        house_str = house[0] if len(house) > 0 else "所属院不明"
 
+        st.markdown(f"**{s['speaker']}（{s['date']}／{house_str}）**")
+        st.markdown(f"会議名：{meeting_name}")
+        st.markdown(f"> {highlighted}")
+        st.markdown(f"[🔗 会議録を見る]({s['meetingURL']})")
+        st.markdown("---")
