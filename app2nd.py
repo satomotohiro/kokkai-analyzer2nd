@@ -5,8 +5,6 @@ import datetime
 import os
 import google.generativeai as genai
 from dotenv import load_dotenv
-import matplotlib.pyplot as plt
-import matplotlib
 
 # --- APIキーの設定 ---
 load_dotenv()
@@ -47,21 +45,24 @@ if selected_party != "指定しない":
 # 全候補リスト（政党指定ありならその政党の議員のみ）
 all_candidates = filtered_df[["name", "yomi"]].drop_duplicates()
 
-# フリガナ付き表示（ユーザー向け）
+# フリガナ付き表示（ユーザー向け） → "山田太郎（やまだたろう）" の形式に
 display_candidates = [
     f"{row['name']}（{row['yomi']}）" for _, row in all_candidates.iterrows()
 ]
 
+# 選択肢：表示はフリガナ付き、内部的には名前だけを取得
 selected_display = st.selectbox(
     "👤 議員を選択（漢字またはよみで検索可能）",
     ["指定しない"] + display_candidates,
     index=0
 )
 
+# 実際の名前だけを取り出す
 if selected_display == "指定しない":
     selected_politician = "指定しない"
 else:
     selected_politician = selected_display.split("（")[0]
+
 
 # 日付範囲
 today = datetime.date.today()
@@ -80,17 +81,20 @@ if st.button("📡 検索して分析"):
     elif selected_party != "指定しない":
         party_members = politicians_df[politicians_df["party"] == selected_party]
 
+        # 「position」が存在する議員を優先
         if "position" in party_members.columns:
             influential_members = party_members[party_members["position"].notna()]
             if influential_members.empty:
-                influential_members = party_members
+                influential_members = party_members  # 全員から選ぶ
         else:
             influential_members = party_members
 
+        # 上位5人を対象とする
         speakers = influential_members["name"].head(5).tolist()
     else:
         st.warning("議員または政党を選択してください。")
         st.stop()
+
 
     all_speeches = []
     for speaker in speakers:
@@ -115,51 +119,45 @@ if st.button("📡 検索して分析"):
         st.warning("該当する発言が見つかりませんでした。")
         st.stop()
 
+    # --- Gemini 要約 ---
     combined_text = "\n\n".join(
         [f"{s['speaker']}（{s['date']}）: {s['speech']}" for s in all_speeches]
     )
-
-    # --- 要約プロンプト構築 ---
+   # 要約プロンプト（議員か政党かで分岐）
     if selected_politician != "指定しない":
+        # 議員単独指定時
         prompt = f"""
-以下は日本の国会における{selected_politician}の発言記録です。
-まず、各発言が「質問」か「答弁（政策説明）」かを内部的に判別してください（出力には含めないでください）。
-そのうえで「{keyword}」に関して、{selected_politician}がどのような立場や政策的考えを持っているかを、文脈を踏まえて**200字以内**で要約してください。
-出力は次のように始めてください：
-「{selected_politician}は〜」
-"""
+    以下は日本の国会における{selected_politician}の発言記録です。:\n\n{combined_text}
+    
+    まず、各発言が「質問」か「答弁（政策説明）」かを内部的に判別してください（出力には含めないでください）。
+    
+    そのうえで「{keyword}」に関して、{selected_politician}がどのような立場や政策的考えを持っているかを、文脈を踏まえて**200字以内**で要約してください。
+    
+    出力は次のように始めてください：
+    「{selected_politician}は〜」
+    """
     else:
+        # 政党指定のみ時
         prompt = f"""
-以下は日本の国会における{selected_party}に所属する議員の発言記録です。
-まず、各発言が「質問」か「答弁（政策説明）」かを内部的に判別してください（出力には含めないでください）。
-そのうえで「{keyword}」に関して、{selected_party}がどのような政策的立場・思想を持っているかを、答弁内容を重視して**200字以内**で要約してください。
-出力は次のように始めてください：
-「{selected_party}は〜」
-"""
+    以下は日本の国会における{selected_party}に所属する議員の発言記録です。:\n\n{combined_text}
+    
+    まず、各発言が「質問」か「答弁（政策説明）」かを内部的に判別してください（出力には含めないでください）。
+    
+    そのうえで「{keyword}」に関して、{selected_party}がどのような政策的立場・思想を持っているかを、文脈を踏まえて**200字以内**で要約してください。
+    
+    出力は次のように始めてください：
+    「{selected_party}は〜」
+    """
+        
+
+
 
     with st.spinner("🧠 要約生成中..."):
-        result = model.generate_content(prompt + "\n\n" + combined_text)
+        result = model.generate_content(prompt)
         st.subheader("📝 生成AIによる要約")
         st.write(result.text)
 
-        # --- 賛否スコア表示 ---
-        st.markdown("### 📊 賛否スコア表示（仮）")
-        score = st.slider("AIが推定した賛否スコア（デモ用）", -1.0, 1.0, 0.0, 0.1)
-
-        def show_sentiment_bar(score):
-            fig, ax = plt.subplots(figsize=(5, 0.4))
-            cmap = matplotlib.colors.LinearSegmentedColormap.from_list("sentiment", ["red", "gray", "green"])
-            norm_score = (score + 1) / 2
-            ax.barh([0], [norm_score], color=cmap(norm_score), height=0.5)
-            ax.set_xlim(0, 1)
-            ax.set_yticks([])
-            ax.set_xticks([0, 0.5, 1])
-            ax.set_xticklabels(["反対", "中立", "賛成"])
-            ax.set_title("立場スコア（-1=反対、+1=賛成）", fontsize=10)
-            st.pyplot(fig)
-
-        show_sentiment_bar(score)
-
+    # --- 結果表示 ---
     st.subheader("📚 発言の詳細")
     for s in all_speeches:
         highlighted = s["speech"].replace(keyword, f"**:orange[{keyword}]**")
