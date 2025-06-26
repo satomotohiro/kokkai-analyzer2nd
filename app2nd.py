@@ -76,24 +76,25 @@ keyword = st.text_input("🗝️ キーワードを入力（例：消費税）")
 # --- 検索ボタン ---
 if st.button("📡 検索して分析"):
 
-    if selected_politician:
+    if selected_politician and selected_politician != "指定しない":
         speakers = [selected_politician]
-    party_members = politicians_df[politicians_df["party"] == selected_party]
-    
-    # 「position」が存在する議員を優先
-    if "position" in party_members.columns:
-        influential_members = party_members[party_members["position"].notna()]
-        if influential_members.empty:
-            influential_members = party_members  # 全員から選ぶ
-    else:
-        influential_members = party_members
+    elif selected_party != "指定しない":
+        party_members = politicians_df[politicians_df["party"] == selected_party]
 
-    # 上位5人を対象とする
-    speakers = influential_members["name"].head(5).tolist()
-
+        # 「position」が存在する議員を優先
+        if "position" in party_members.columns:
+            influential_members = party_members[party_members["position"].notna()]
+            if influential_members.empty:
+                influential_members = party_members  # 全員から選ぶ
         else:
-            st.warning("議員または政党を選択してください。")
-            st.stop()
+            influential_members = party_members
+
+        # 上位5人を対象とする
+        speakers = influential_members["name"].head(5).tolist()
+    else:
+        st.warning("議員または政党を選択してください。")
+        st.stop()
+
 
     all_speeches = []
     for speaker in speakers:
