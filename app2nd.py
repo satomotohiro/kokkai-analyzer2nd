@@ -101,30 +101,38 @@ if st.button("📡 検索して分析"):
         st.stop()
 
     all_speeches = []
+    seen_ids = set()
     for speaker in speakers:
-        params = {
-            "speaker": speaker,
-            "any": " ".join(keywords),
-            "from": from_date.strftime("%Y-%m-%d"),
-            "until": to_date.strftime("%Y-%m-%d"),
-            "recordPacking": "json",
-            "maximumRecords": 5,
-            "startRecord": 1,
-        }
-        try:
-            response = requests.get("https://kokkai.ndl.go.jp/api/speech", params=params)
-            if response.status_code == 200:
-                data = response.json()
-                all_speeches.extend(data.get("speechRecord", []))
-        except Exception as e:
-            st.error(f"{speaker} のデータ取得エラー: {e}")
+        for kw in keywords:
+            params = {
+                "speaker": speaker,
+                "any": kw,
+                "from": from_date.strftime("%Y-%m-%d"),
+                "until": to_date.strftime("%Y-%m-%d"),
+                "recordPacking": "json",
+                "maximumRecords": 5,
+                "startRecord": 1,
+            }
+            try:
+                response = requests.get("https://kokkai.ndl.go.jp/api/speech", params=params)
+                if response.status_code == 200:
+                    data = response.json()
+                    speeches = data.get("speechRecord", [])
+                    for s in speeches:
+                        uid = s.get("speechID")
+                        if uid and uid not in seen_ids:
+                            all_speeches.append(s)
+                            seen_ids.add(uid)
+            except Exception as e:
+                st.error(f"{speaker} のキーワード「{kw}」検索でエラー: {e}")
 
     if not all_speeches:
         st.warning("該当する発言が見つかりませんでした。")
         st.stop()
 
+    gemini_input_speeches = all_speeches[:10]
     combined_text = "\n\n".join(
-        [f"{s['speaker']}（{s['date']}）: {s['speech']}" for s in all_speeches]
+        [f"{s['speaker']}（{s['date']}）: {s['speech']}" for s in gemini_input_speeches]
     )
 
     if selected_politician != "指定しない":
