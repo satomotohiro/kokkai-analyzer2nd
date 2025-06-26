@@ -76,11 +76,13 @@ five_years_ago = today.replace(year=today.year - 5)
 from_date = st.date_input("開始日", value=five_years_ago)
 to_date = st.date_input("終了日", value=today)
 
-# 複数キーワード入力と例の表示
+# --- 最大3つのキーワード欄 ---
 st.markdown("💡 よく使われる政治キーワード例：")
 st.markdown("`消費税` `子育て支援` `外交` `原発` `防衛費` `教育無償化` `年金` `経済安全保障`")
-raw_keywords = st.text_input("🗝️ キーワードを入力（スペース区切りで複数可）", value="")
-keywords = [k.strip() for k in raw_keywords.split() if k.strip()]
+keyword1 = st.text_input("🗝️ キーワード1", "")
+keyword2 = st.text_input("🗝️ キーワード2", "")
+keyword3 = st.text_input("🗝️ キーワード3", "")
+keywords = [kw.strip() for kw in [keyword1, keyword2, keyword3] if kw.strip()]
 
 # --- 検索ボタン ---
 if st.button("📡 検索して分析"):
@@ -88,40 +90,30 @@ if st.button("📡 検索して分析"):
     all_speeches = []
     seen_ids = set()
 
-    if selected_politician and selected_politician != "指定しない":
+    if selected_politician != "指定しない":
         speakers = [selected_politician]
-        for speaker in speakers:
-            for kw in keywords:
-                params = {
-                    "speaker": speaker,
-                    "any": kw,
-                    "from": from_date.strftime("%Y-%m-%d"),
-                    "until": to_date.strftime("%Y-%m-%d"),
-                    "recordPacking": "json",
-                    "maximumRecords": 5,
-                    "startRecord": 1,
-                }
-                try:
-                    response = requests.get("https://kokkai.ndl.go.jp/api/speech", params=params)
-                    if response.status_code == 200:
-                        data = response.json()
-                        speeches = data.get("speechRecord", [])
-                        for s in speeches:
-                            uid = s.get("speechID")
-                            if uid and uid not in seen_ids:
-                                all_speeches.append(s)
-                                seen_ids.add(uid)
-                except Exception as e:
-                    st.error(f"{speaker} のキーワード「{kw}」検索でエラー: {e}")
-
     elif selected_party != "指定しない":
-        for kw in keywords:
+        party_members = politicians_df[politicians_df["party"] == selected_party]
+        if "position" in party_members.columns:
+            influential_members = party_members[party_members["position"].notna()]
+            if influential_members.empty:
+                influential_members = party_members
+        else:
+            influential_members = party_members
+        speakers = influential_members["name"].head(5).tolist()
+    else:
+        st.warning("議員または政党を選択してください。")
+        st.stop()
+
+    for kw in keywords:
+        for speaker in speakers:
             params = {
+                "speaker": speaker,
                 "any": kw,
                 "from": from_date.strftime("%Y-%m-%d"),
                 "until": to_date.strftime("%Y-%m-%d"),
                 "recordPacking": "json",
-                "maximumRecords": 50,
+                "maximumRecords": 5,
                 "startRecord": 1,
             }
             try:
@@ -131,16 +123,11 @@ if st.button("📡 検索して分析"):
                     speeches = data.get("speechRecord", [])
                     for s in speeches:
                         uid = s.get("speechID")
-                        speaker_name = normalize(s.get("speaker", ""))
-                        party_match = politicians_df[politicians_df["name"] == speaker_name]["party"].values
-                        if uid and uid not in seen_ids and len(party_match) > 0 and party_match[0] == selected_party:
+                        if uid and uid not in seen_ids:
                             all_speeches.append(s)
                             seen_ids.add(uid)
             except Exception as e:
-                st.error(f"政党 {selected_party} のキーワード「{kw}」検索でエラー: {e}")
-    else:
-        st.warning("議員または政党を選択してください。")
-        st.stop()
+                st.error(f"{speaker} のキーワード「{kw}」検索でエラー: {e}")
 
     if not all_speeches:
         st.warning("該当する発言が見つかりませんでした。")
@@ -153,25 +140,24 @@ if st.button("📡 検索して分析"):
 
     if selected_politician != "指定しない":
         prompt = f"""
-    以下は日本の国会における{selected_politician}の発言記録です。:\n\n{combined_text}
+        以下は日本の国会における{selected_politician}の発言記録です。:\n\n{combined_text}
 
-    まず、各発言が「質問」か「答弁（政策説明）」かを内部的に判別してください（出力には含めないでください）。
+        まず、各発言が「質問」か「答弁（政策説明）」かを内部的に判別してください（出力には含めないでください）。
 
-    次に、以下2つの出力をそれぞれ順番に提供してください：
-    ・「{'、'.join(keywords)}」に関して{selected_politician}が述べた内容を要約し、20字以内の見出しとして出力してください（出力例：「防衛費の増額を支持」などとしてください。見出しなどを文頭につける必要はありません）。
-    ・そのうえで「{'、'.join(keywords)}」に関して、{selected_politician}がどのような立場や政策的考えを持っているかを、文脈を踏まえて**200字以内**で要約してください。（出力は「{selected_politician}は〜」で始めてください）。
-    """
+        次に、以下2つの出力をそれぞれ順番に提供してください：
+        ・「{'、'.join(keywords)}」に関して{selected_politician}が述べた内容を要約し、20字以内の見出しとして出力してください（出力例：「防衛費の増額を支持」などとしてください）。
+        ・そのうえで「{'、'.join(keywords)}」に関して、{selected_politician}がどのような立場や政策的考えを持っているかを、文脈を踏まえて**200字以内**で要約してください。（出力は「{selected_politician}は〜」で始めてください）。
+        """
     else:
         prompt = f"""
-    以下は日本の国会における{selected_party}に所属する議員の発言記録です。:\n\n{combined_text}
+        以下は日本の国会における{selected_party}に所属する議員の発言記録です。:\n\n{combined_text}
 
-    まず、各発言が「質問」か「答弁（政策説明）」かを内部的に判別してください（出力には含めないでください）。
+        まず、各発言が「質問」か「答弁（政策説明）」かを内部的に判別してください（出力には含めないでください）。
 
-    次に、以下2つの出力をそれぞれ順番に提供してください：
-
-    ・「{'、'.join(keywords)}」に関して{selected_party}の立場を要約し、20字以内の見出しとして出力してください（出力例：「消費税減税に慎重姿勢」などとしてください。見出しなどを文頭につける必要はありません）。
-    ・ そのうえで「{'、'.join(keywords)}」に関して、{selected_party}がどのような政策的立場・思想を持っているかを、文脈を踏まえて**200字以内**で要約してください。（出力は「{selected_party}は〜」で始めてください）。
-    """
+        次に、以下2つの出力をそれぞれ順番に提供してください：
+        ・「{'、'.join(keywords)}」に関して{selected_party}の立場を要約し、20字以内の見出しとして出力してください（出力例：「消費税減税に慎重姿勢」などとしてください）。
+        ・そのうえで「{'、'.join(keywords)}」に関して、{selected_party}がどのような政策的立場・思想を持っているかを、文脈を踏まえて**200字以内**で要約してください。（出力は「{selected_party}は〜」で始めてください）。
+        """
 
     with st.spinner("🧠 要約生成中..."):
         result = model.generate_content(prompt)
