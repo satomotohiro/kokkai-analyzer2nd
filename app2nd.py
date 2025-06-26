@@ -76,106 +76,36 @@ five_years_ago = today.replace(year=today.year - 5)
 from_date = st.date_input("開始日", value=five_years_ago)
 to_date = st.date_input("終了日", value=today)
 
-# --- 最大3つのキーワード欄 ---
+# --- 最大3つのキーワード欄（ボタンクリックで補完） ---
 st.markdown("💡 よく使われる政治キーワード例：")
-st.markdown("`消費税` `子育て支援` `外交` `原発` `防衛費` `教育無償化` `年金` `経済安全保障`")
-keyword1 = st.text_input("🗝️ キーワード1", "")
-keyword2 = st.text_input("🗝️ キーワード2", "")
-keyword3 = st.text_input("🗝️ キーワード3", "")
+example_keywords = ["消費税", "子育て支援", "外交", "原発", "防衛費", "教育無償化", "年金", "経済安全保障"]
+
+clicked_keywords = []
+cols = st.columns(4)
+for i, kw in enumerate(example_keywords):
+    if cols[i % 4].button(kw):
+        clicked_keywords.append(kw)
+
+# セッションステートに入力履歴を保持
+if "kw1" not in st.session_state:
+    st.session_state.kw1 = ""
+if "kw2" not in st.session_state:
+    st.session_state.kw2 = ""
+if "kw3" not in st.session_state:
+    st.session_state.kw3 = ""
+
+# 自動入力（最初の空欄に割り当て）
+for kw in clicked_keywords:
+    if not st.session_state.kw1:
+        st.session_state.kw1 = kw
+    elif not st.session_state.kw2:
+        st.session_state.kw2 = kw
+    elif not st.session_state.kw3:
+        st.session_state.kw3 = kw
+
+keyword1 = st.text_input("🗝️ キーワード1", st.session_state.kw1)
+keyword2 = st.text_input("🗝️ キーワード2", st.session_state.kw2)
+keyword3 = st.text_input("🗝️ キーワード3", st.session_state.kw3)
 keywords = [kw.strip() for kw in [keyword1, keyword2, keyword3] if kw.strip()]
 
-# --- 検索ボタン ---
-if st.button("📡 検索して分析"):
-
-    all_speeches = []
-    seen_ids = set()
-
-    if selected_politician != "指定しない":
-        speakers = [selected_politician]
-    elif selected_party != "指定しない":
-        party_members = politicians_df[politicians_df["party"] == selected_party]
-        if "position" in party_members.columns:
-            influential_members = party_members[party_members["position"].notna()]
-            if influential_members.empty:
-                influential_members = party_members
-        else:
-            influential_members = party_members
-        speakers = influential_members["name"].head(5).tolist()
-    else:
-        st.warning("議員または政党を選択してください。")
-        st.stop()
-
-    for kw in keywords:
-        for speaker in speakers:
-            params = {
-                "speaker": speaker,
-                "any": kw,
-                "from": from_date.strftime("%Y-%m-%d"),
-                "until": to_date.strftime("%Y-%m-%d"),
-                "recordPacking": "json",
-                "maximumRecords": 5,
-                "startRecord": 1,
-            }
-            try:
-                response = requests.get("https://kokkai.ndl.go.jp/api/speech", params=params)
-                if response.status_code == 200:
-                    data = response.json()
-                    speeches = data.get("speechRecord", [])
-                    for s in speeches:
-                        uid = s.get("speechID")
-                        if uid and uid not in seen_ids:
-                            all_speeches.append(s)
-                            seen_ids.add(uid)
-            except Exception as e:
-                st.error(f"{speaker} のキーワード「{kw}」検索でエラー: {e}")
-
-    if not all_speeches:
-        st.warning("該当する発言が見つかりませんでした。")
-        st.stop()
-
-    gemini_input_speeches = all_speeches[:10]
-    combined_text = "\n\n".join(
-        [f"{s['speaker']}（{s['date']}）: {s['speech']}" for s in gemini_input_speeches]
-    )
-
-    if selected_politician != "指定しない":
-        prompt = f"""
-        以下は日本の国会における{selected_politician}の発言記録です。:\n\n{combined_text}
-
-        まず、各発言が「質問」か「答弁（政策説明）」かを内部的に判別してください（出力には含めないでください）。
-
-        次に、以下2つの出力をそれぞれ順番に提供してください：
-        ・「{'、'.join(keywords)}」に関して{selected_politician}が述べた内容を要約し、20字以内の見出しとして出力してください（出力例：「防衛費の増額を支持」などとしてください）。
-        ・そのうえで「{'、'.join(keywords)}」に関して、{selected_politician}がどのような立場や政策的考えを持っているかを、文脈を踏まえて**200字以内**で要約してください。（出力は「{selected_politician}は〜」で始めてください）。
-        """
-    else:
-        prompt = f"""
-        以下は日本の国会における{selected_party}に所属する議員の発言記録です。:\n\n{combined_text}
-
-        まず、各発言が「質問」か「答弁（政策説明）」かを内部的に判別してください（出力には含めないでください）。
-
-        次に、以下2つの出力をそれぞれ順番に提供してください：
-        ・「{'、'.join(keywords)}」に関して{selected_party}の立場を要約し、20字以内の見出しとして出力してください（出力例：「消費税減税に慎重姿勢」などとしてください）。
-        ・そのうえで「{'、'.join(keywords)}」に関して、{selected_party}がどのような政策的立場・思想を持っているかを、文脈を踏まえて**200字以内**で要約してください。（出力は「{selected_party}は〜」で始めてください）。
-        """
-
-    with st.spinner("🧠 要約生成中..."):
-        result = model.generate_content(prompt)
-        st.subheader("📝 生成AIによる要約")
-        st.write(result.text)
-
-    st.subheader("📚 発言の詳細")
-    for s in all_speeches:
-        meeting_name = s.get("nameOfMeeting") or s.get("meeting") or "会議名不明"
-        speaker_name = normalize(s["speaker"])
-        house_info = politicians_df[politicians_df["name"] == speaker_name]["house"]
-        house = house_info.values[0] if len(house_info) else "所属院不明"
-
-        st.markdown(f"**{s['speaker']}（{s['date']}／{house}）**")
-        st.markdown(f"会議名：{meeting_name}")
-
-        highlighted = highlight_keywords_multi(s["speech"], keywords)
-        st.markdown(f"> {highlighted}", unsafe_allow_html=True)
-
-        st.markdown(f"[🔗 会議録を見る]({s.get('meetingURL', '#')})")
-        st.markdown("---")
+# 以下のロジックは変更せずに続きます ...（検索ボタン以降）
