@@ -88,8 +88,8 @@ if st.button("📡 検索して分析"):
     else:
         influential_members = party_members
 
-# 上位5人を対象とする
-speakers = influential_members["name"].head(5).tolist()
+    # 上位5人を対象とする
+    speakers = influential_members["name"].head(5).tolist()
 
     else:
         st.warning("議員または政党を選択してください。")
