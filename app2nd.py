@@ -6,6 +6,20 @@ import os
 import google.generativeai as genai
 from dotenv import load_dotenv
 
+import re
+
+# ハイライト用関数
+def highlight_keywords(text, keyword):
+    if keyword:
+        highlighted = re.sub(
+            f"({re.escape(keyword)})",
+            r'<span style="background: repeating-linear-gradient(45deg, yellow, yellow 4px, transparent 4px, transparent 8px);">\u0001</span>',
+            text,
+            flags=re.IGNORECASE
+        )
+        return highlighted
+    return text
+
 # --- APIキーの設定 ---
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
@@ -157,15 +171,19 @@ if st.button("📡 検索して分析"):
 
     # --- 結果表示 ---
     st.subheader("📚 発言の詳細")
+    # 発言表示ループ内
     for s in all_speeches:
-        highlighted = s["speech"].replace(keyword, f"**:orange[{keyword}]**")
         meeting_name = s.get("nameOfMeeting") or s.get("meeting") or "会議名不明"
         speaker_name = normalize(s["speaker"])
         house_info = politicians_df[politicians_df["name"] == speaker_name]["house"]
         house = house_info.values[0] if len(house_info) else "所属院不明"
-
+    
         st.markdown(f"**{s['speaker']}（{s['date']}／{house}）**")
         st.markdown(f"会議名：{meeting_name}")
-        st.markdown(f"> {highlighted}")
+    
+        # ✅ ハイライトを追加
+        highlighted = highlight_keywords(s["speech"], keyword)
+        st.markdown(f"> {highlighted}", unsafe_allow_html=True)
+    
         st.markdown(f"[🔗 会議録を見る]({s.get('meetingURL', '#')})")
         st.markdown("---")
