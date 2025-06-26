@@ -25,10 +25,9 @@ def normalize(name):
 politicians_df["name"] = politicians_df["name"].apply(normalize)
 politicians_df["yomi"] = politicians_df["yomi"].apply(normalize)
 
-# 主要政党優先の表示順
-major_parties = ["自由民主党", "立憲民主党", "日本維新の会", "公明党", "国民民主党", "共産党", "れいわ新選組"]
-all_parties = sorted(politicians_df["party"].dropna().unique())
-sorted_parties = major_parties + [p for p in all_parties if p not in major_parties]
+# 政党を議員数の多い順に並べ替え
+party_counts = politicians_df["party"].value_counts()
+sorted_parties = party_counts.index.tolist()
 
 # --- UI ---
 st.title("🎤 国会議員の発言分析")
@@ -38,21 +37,22 @@ st.markdown("### 🎯 検索条件を設定")
 # 政党選択を先に
 selected_party = st.selectbox("🏛️ 政党を選択", ["指定しない"] + sorted_parties)
 
-# 議員入力（フリガナ対応）
-user_input = st.text_input("👤 議員名（漢字またはよみ）")
+# 議員名入力（プルダウンと直接入力の統合）
+user_input = st.text_input("👤 議員名を漢字またはよみで入力")
 
-# 議員候補フィルター（政党指定ありなら絞る）
-filtered_df = politicians_df.copy()
-if selected_party != "指定しない":
-    filtered_df = filtered_df[filtered_df["party"] == selected_party]
-
+# 入力がある場合の正規化と候補絞り込み
+selected_politician = ""
 if user_input:
-    filtered_df = filtered_df[
-        filtered_df["name"].str.contains(user_input) | filtered_df["yomi"].str.contains(user_input)
+    user_input_norm = normalize(user_input)
+    filtered_df = politicians_df.copy()
+    if selected_party != "指定しない":
+        filtered_df = filtered_df[filtered_df["party"] == selected_party]
+    matched = filtered_df[
+        filtered_df["name"].str.contains(user_input_norm) |
+        filtered_df["yomi"].str.contains(user_input_norm)
     ]
-
-politician_candidates = sorted(filtered_df["name"].unique())
-selected_politician = st.selectbox("一致する議員候補", ["指定しない"] + politician_candidates)
+    if not matched.empty:
+        selected_politician = matched.iloc[0]["name"]
 
 # 日付範囲
 today = datetime.date.today()
@@ -66,7 +66,7 @@ keyword = st.text_input("🗝️ キーワードを入力（例：消費税）")
 # --- 検索ボタン ---
 if st.button("📡 検索して分析"):
 
-    if selected_politician != "指定しない":
+    if selected_politician:
         speakers = [selected_politician]
     elif selected_party != "指定しない":
         party_members = politicians_df[politicians_df["party"] == selected_party]
