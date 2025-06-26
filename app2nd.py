@@ -84,12 +84,12 @@ five_years_ago = today.replace(year=today.year - 5)
 from_date = st.date_input("開始日", value=five_years_ago)
 to_date = st.date_input("終了日", value=today)
 
-# 複数キーワード入力と例の表示
-st.markdown("💡 よく使われる政治キーワード例：")
-st.markdown("消費税 子育て支援 外交 原発 防衛費 教育無償化 年金 経済安全保障")
-
 # キーワード
-keyword = st.text_input("🗝️ キーワードを入力（例：消費税）※単一キーワードのみ")
+keyword = st.text_input("🗝️ キーワードを入力（例：消費税）※単一キーワードのみ可")
+
+# キーワード例の表示
+st.markdown("💡 よく使われる政治キーワード例：")
+st.markdown("消費税　子育て支援　外交　原発　防衛費　教育無償化　年金　経済安全保障")
 
 # --- 検索ボタン ---
 if st.button("📡 検索して分析"):
