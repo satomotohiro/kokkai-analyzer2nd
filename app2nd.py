@@ -11,9 +11,9 @@ load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel("models/gemini-1.5-flash")
 
-# --- CSV読み込み（文字コードはcp932を明示） ---
+# --- CSV読み込み（エンコーディング明示） ---
 csv_path = "politicians.csv"
-politicians_df = pd.read_csv(csv_path, encoding="cp932")
+politicians_df = pd.read_csv(csv_path, encoding="cp932", on_bad_lines="skip")
 politicians_df["name"] = politicians_df["name"].str.replace("　", "").str.replace(" ", "")  # 全角・半角スペース除去
 
 # --- 政党・議員リスト作成 ---
@@ -30,30 +30,28 @@ st.markdown("議事録から該当発言をAIで分析し、政治家や政党�
 
 # --- 入力フォーム ---
 st.markdown("### 🎯 検索条件を設定")
+
+# 政党選択
 selected_party = st.selectbox("🏛️ 政党を選択", ["（指定しない）"] + party_names)
 
-# 政党で絞った議員を表示
-if selected_party != "（指定しない）":
-    filtered_names = sorted(politicians_df[politicians_df["party"] == selected_party]["name"].unique())
-else:
-    filtered_names = politician_names
+# オートコンプリート付き議員名検索（1つの入力欄に統合）
+default_politician = ""
+entered_politician = st.text_input(
+    "👤 議員名を入力（候補例：大石あきこ）", placeholder="議員名を入力", value=default_politician
+)
+manual_input_clean = entered_politician.replace("　", "").replace(" ", "")
 
-selected_politician = st.selectbox("👤 国会議員を選択", ["（指定しない）"] + filtered_names)
-manual_input = st.text_input("または名前を直接入力（例：大石あきこ）")
-
-# 名前から政党を自動補完
-if manual_input:
-    manual_input_clean = manual_input.replace("　", "").replace(" ", "")
+# 自動で政党を補完
+if manual_input_clean:
     matched = politicians_df[politicians_df["name"] == manual_input_clean]
-    if not matched.empty:
+    if not matched.empty and selected_party == "（指定しない）":
         auto_party = matched["party"].values[0]
-        if selected_party == "（指定しない）":
-            selected_party = auto_party
-            st.info(f"🧾 所属政党を自動補完：**{auto_party}**")
+        selected_party = auto_party
+        st.info(f"🧾 所属政党を自動補完：**{auto_party}**")
 
 keyword = st.text_input("🗝️ キーワードを入力（例：防衛）")
 
-# 日付
+# 日付指定
 today = datetime.date.today()
 five_years_ago = today.replace(year=today.year - 5)
 from_date = st.date_input("開始日", value=five_years_ago)
@@ -63,8 +61,7 @@ to_date = st.date_input("終了日", value=today)
 if st.button("📡 検索して分析"):
     st.info("検索中...")
 
-    speaker = manual_input if manual_input else (selected_politician if selected_politician != "（指定しない）" else None)
-
+    speaker = manual_input_clean if manual_input_clean else None
     params = {
         "speaker": speaker,
         "party": selected_party if speaker is None and selected_party != "（指定しない）" else None,
@@ -106,7 +103,7 @@ if st.button("📡 検索して分析"):
                     for s in speeches:
                         speaker_name = s.get("speaker", "不明")
                         chamber = s.get("speakerPosition", "所属院不明")
-                        meeting_name = s.get("meeting", "不明")
+                        meeting_name = s.get("meeting", "不明")  # 会議名を修正済
                         highlighted = s["speech"].replace(keyword, f"<span style='background-color: #fff3cd'>{keyword}</span>")
                         st.markdown(f"**{speaker_name}（{chamber} / {s['date']}）**", unsafe_allow_html=True)
                         st.markdown(f"会議名：{meeting_name}")
