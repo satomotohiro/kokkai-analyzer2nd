@@ -127,7 +127,7 @@ if st.button("📡 検索して分析"):
     if selected_politician != "指定しない":
         # 議員単独指定時
         prompt = f"""
-    以下は日本の国会における{selected_politician}の発言記録です。
+    以下は日本の国会における{selected_politician}の発言記録です。:\n\n{combined_text}
     
     まず、各発言が「質問」か「答弁（政策説明）」かを内部的に判別してください（出力には含めないでください）。
     
@@ -139,7 +139,7 @@ if st.button("📡 検索して分析"):
     else:
         # 政党指定のみ時
         prompt = f"""
-    以下は日本の国会における{selected_party}に所属する議員の発言記録です。
+    以下は日本の国会における{selected_party}に所属する議員の発言記録です。:\n\n{combined_text}
     
     まず、各発言が「質問」か「答弁（政策説明）」かを内部的に判別してください（出力には含めないでください）。
     
@@ -148,6 +148,7 @@ if st.button("📡 検索して分析"):
     出力は次のように始めてください：
     「{selected_party}は〜」
     """
+        
 
 
 
