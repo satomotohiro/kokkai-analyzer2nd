@@ -85,32 +85,43 @@ keywords = [k.strip() for k in raw_keywords.split() if k.strip()]
 # --- 検索ボタン ---
 if st.button("📡 検索して分析"):
 
-    if selected_politician and selected_politician != "指定しない":
-        speakers = [selected_politician]
-    elif selected_party != "指定しない":
-        party_members = politicians_df[politicians_df["party"] == selected_party]
-        if "position" in party_members.columns:
-            influential_members = party_members[party_members["position"].notna()]
-            if influential_members.empty:
-                influential_members = party_members
-        else:
-            influential_members = party_members
-        speakers = influential_members["name"].head(5).tolist()
-    else:
-        st.warning("議員または政党を選択してください。")
-        st.stop()
-
     all_speeches = []
     seen_ids = set()
-    for speaker in speakers:
+
+    if selected_politician and selected_politician != "指定しない":
+        speakers = [selected_politician]
+        for speaker in speakers:
+            for kw in keywords:
+                params = {
+                    "speaker": speaker,
+                    "any": kw,
+                    "from": from_date.strftime("%Y-%m-%d"),
+                    "until": to_date.strftime("%Y-%m-%d"),
+                    "recordPacking": "json",
+                    "maximumRecords": 5,
+                    "startRecord": 1,
+                }
+                try:
+                    response = requests.get("https://kokkai.ndl.go.jp/api/speech", params=params)
+                    if response.status_code == 200:
+                        data = response.json()
+                        speeches = data.get("speechRecord", [])
+                        for s in speeches:
+                            uid = s.get("speechID")
+                            if uid and uid not in seen_ids:
+                                all_speeches.append(s)
+                                seen_ids.add(uid)
+                except Exception as e:
+                    st.error(f"{speaker} のキーワード「{kw}」検索でエラー: {e}")
+
+    elif selected_party != "指定しない":
         for kw in keywords:
             params = {
-                "speaker": speaker,
                 "any": kw,
                 "from": from_date.strftime("%Y-%m-%d"),
                 "until": to_date.strftime("%Y-%m-%d"),
                 "recordPacking": "json",
-                "maximumRecords": 5,
+                "maximumRecords": 50,
                 "startRecord": 1,
             }
             try:
@@ -120,11 +131,16 @@ if st.button("📡 検索して分析"):
                     speeches = data.get("speechRecord", [])
                     for s in speeches:
                         uid = s.get("speechID")
-                        if uid and uid not in seen_ids:
+                        speaker_name = normalize(s.get("speaker", ""))
+                        party_match = politicians_df[politicians_df["name"] == speaker_name]["party"].values
+                        if uid and uid not in seen_ids and len(party_match) > 0 and party_match[0] == selected_party:
                             all_speeches.append(s)
                             seen_ids.add(uid)
             except Exception as e:
-                st.error(f"{speaker} のキーワード「{kw}」検索でエラー: {e}")
+                st.error(f"政党 {selected_party} のキーワード「{kw}」検索でエラー: {e}")
+    else:
+        st.warning("議員または政党を選択してください。")
+        st.stop()
 
     if not all_speeches:
         st.warning("該当する発言が見つかりませんでした。")
