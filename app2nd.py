@@ -13,7 +13,7 @@ def highlight_keywords(text, keyword):
     if keyword:
         highlighted = re.sub(
             f"({re.escape(keyword)})",
-            r'<span style="background: repeating-linear-gradient(45deg, yellow, yellow 4px, transparent 4px, transparent 8px);">\u0001</span>',
+            r'<span style="background: repeating-linear-gradient(45deg, yellow, yellow 4px, transparent 4px, transparent 8px);">\1</span>',
             text,
             flags=re.IGNORECASE
         )
