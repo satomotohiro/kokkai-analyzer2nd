@@ -91,9 +91,9 @@ if st.button("📡 検索して分析"):
     # 上位5人を対象とする
     speakers = influential_members["name"].head(5).tolist()
 
-    else:
-        st.warning("議員または政党を選択してください。")
-        st.stop()
+        else:
+            st.warning("議員または政党を選択してください。")
+            st.stop()
 
     all_speeches = []
     for speaker in speakers:
