@@ -35,7 +35,7 @@ st.title("🎤 国会議員の発言分析")
 st.markdown("### 🎯 検索条件を設定")
 
 # 政党選択を先に
-selected_party = st.selectbox("🏛️ 政党を選択", ["指定しない"] + sorted_parties)
+selected_party = st.selectbox("🏛️ 政党を選択（議員数順）", ["指定しない"] + sorted_parties)
 
 # --- 議員名入力と候補絞り込み（selectbox使用） ---
 filtered_df = politicians_df.copy()
