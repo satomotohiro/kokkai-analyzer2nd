@@ -78,10 +78,19 @@ if st.button("📡 検索して分析"):
 
     if selected_politician:
         speakers = [selected_politician]
-    elif selected_party != "指定しない":
-        party_members = politicians_df[politicians_df["party"] == selected_party]
-        top_members = party_members.head(5)
-        speakers = top_members["name"].tolist()
+    party_members = politicians_df[politicians_df["party"] == selected_party]
+    
+    # 「position」が存在する議員を優先
+    if "position" in party_members.columns:
+        influential_members = party_members[party_members["position"].notna()]
+        if influential_members.empty:
+            influential_members = party_members  # 全員から選ぶ
+    else:
+        influential_members = party_members
+
+# 上位5人を対象とする
+speakers = influential_members["name"].head(5).tolist()
+
     else:
         st.warning("議員または政党を選択してください。")
         st.stop()
