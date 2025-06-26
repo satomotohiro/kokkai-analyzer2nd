@@ -37,22 +37,32 @@ st.markdown("### 🎯 検索条件を設定")
 # 政党選択を先に
 selected_party = st.selectbox("🏛️ 政党を選択", ["指定しない"] + sorted_parties)
 
-# 議員名入力（プルダウンと直接入力の統合）
-user_input = st.text_input("👤 議員名を漢字またはよみで入力")
+# --- 議員名入力と候補絞り込み（selectbox使用） ---
+filtered_df = politicians_df.copy()
+if selected_party != "指定しない":
+    filtered_df = filtered_df[filtered_df["party"] == selected_party]
 
-# 入力がある場合の正規化と候補絞り込み
-selected_politician = ""
-if user_input:
-    user_input_norm = normalize(user_input)
-    filtered_df = politicians_df.copy()
-    if selected_party != "指定しない":
-        filtered_df = filtered_df[filtered_df["party"] == selected_party]
-    matched = filtered_df[
-        filtered_df["name"].str.contains(user_input_norm) |
-        filtered_df["yomi"].str.contains(user_input_norm)
-    ]
-    if not matched.empty:
-        selected_politician = matched.iloc[0]["name"]
+# 全候補リスト（政党指定ありならその政党の議員のみ）
+all_candidates = filtered_df[["name", "yomi"]].drop_duplicates()
+
+# フリガナ付き表示（ユーザー向け） → "山田太郎（やまだたろう）" の形式に
+display_candidates = [
+    f"{row['name']}（{row['yomi']}）" for _, row in all_candidates.iterrows()
+]
+
+# 選択肢：表示はフリガナ付き、内部的には名前だけを取得
+selected_display = st.selectbox(
+    "👤 議員を選択（漢字またはよみで検索可能）",
+    ["指定しない"] + display_candidates,
+    index=0
+)
+
+# 実際の名前だけを取り出す
+if selected_display == "指定しない":
+    selected_politician = "指定しない"
+else:
+    selected_politician = selected_display.split("（")[0]
+
 
 # 日付範囲
 today = datetime.date.today()
