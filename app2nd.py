@@ -188,15 +188,15 @@ if st.button("📡 検索して分析"):
     try:
         result = model.generate_content(prompt)
         summary = result.text
-    except Exception as e:
-        if "ResourceExhausted" in str(e) or "quota" in str(e).lower():
-            st.error("🚫 現在、生成AIの利用上限に達している可能性があります。時間をおいて再度お試しください。")
-        else:
-            st.error(f"⚠️ 要約生成中に予期しないエラーが発生しました: {e}")
-        st.stop()
-
-        st.subheader("📝 生成AIによる要約")
-        st.write(summary)
+        except Exception as e:
+            if "ResourceExhausted" in str(e) or "quota" in str(e).lower():
+                st.error("🚫 現在、生成AIの利用上限に達している可能性があります。時間をおいて再度お試しください。")
+            else:
+                st.error(f"⚠️ 要約生成中に予期しないエラーが発生しました: {e}")
+            st.stop()
+    
+            st.subheader("📝 生成AIによる要約")
+            st.write(summary)
 
     st.subheader("📚 発言の詳細")
     for s in all_speeches:
