@@ -44,8 +44,7 @@ sorted_parties = party_counts.index.tolist()
 
 # --- UI ---
 st.title("🎤 国会議員の発言分析")
-st.markdown("国会議事録をもとに議員や政党の発言からキーワードに関する主張や考え方を生成AIが要約します。生成AIの要約精度は必ずしも正確ではありません。要約の根拠となる国会での発言もぜひ併せてご確認ください")
-st.markdown("本サイトが選挙で「誰に・どの党に投票するか」の参考の一つになれば幸いです。")
+
 st.markdown("### 🎯 検索条件を設定")
 
 # 政党選択を先に
@@ -185,18 +184,18 @@ if st.button("📡 検索して分析"):
         """
 
     with st.spinner("💬 要約準備中..."):
-    try:
-        result = model.generate_content(prompt)
-        summary = result.text
+        try:
+            result = model.generate_content(prompt)
+            summary = result.text
         except Exception as e:
             if "ResourceExhausted" in str(e) or "quota" in str(e).lower():
                 st.error("🚫 現在、生成AIの利用上限に達している可能性があります。時間をおいて再度お試しください。")
             else:
                 st.error(f"⚠️ 要約生成中に予期しないエラーが発生しました: {e}")
             st.stop()
-    
-            st.subheader("📝 生成AIによる要約")
-            st.write(summary)
+
+    st.subheader("📝 生成AIによる要約")
+    st.write(summary)
 
     st.subheader("📚 発言の詳細")
     for s in all_speeches:
