@@ -87,13 +87,24 @@ for i, kw in enumerate(example_keywords):
     if cols[i % 4].button(kw):
         clicked_keywords.append(kw)
 
-# セッションステートに入力履歴を保持
+# セッションステートに入力履歴を保持（リセット用）
+if st.button("🔄 キーワードをリセット"):
+    st.session_state.kw1 = ""
+    st.session_state.kw2 = ""
+    st.session_state.kw3 = ""
+
 if "kw1" not in st.session_state:
     st.session_state.kw1 = ""
 if "kw2" not in st.session_state:
     st.session_state.kw2 = ""
 if "kw3" not in st.session_state:
     st.session_state.kw3 = ""
+
+clicked_keywords = []
+cols = st.columns(4)
+for i, kw in enumerate(example_keywords):
+    if cols[i % 4].button(kw):
+        clicked_keywords.append(kw)
 
 # 自動入力（最初の空欄に割り当て）
 for kw in clicked_keywords:
