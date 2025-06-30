@@ -81,12 +81,6 @@ to_date = st.date_input("終了日", value=today)
 st.markdown("💡 よく使われる政治キーワード例：")
 example_keywords = ["消費税", "子育て支援", "外交", "原発", "防衛費", "教育無償化", "年金", "経済安全保障"]
 
-clicked_keywords = []
-cols = st.columns(4)
-for i, kw in enumerate(example_keywords):
-    if cols[i % 4].button(kw):
-        clicked_keywords.append(kw)
-
 # セッションステートに入力履歴を保持（リセット用）
 if st.button("🔄 キーワードをリセット"):
     st.session_state.kw1 = ""
