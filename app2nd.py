@@ -22,7 +22,9 @@ def highlight_keywords_multi(text, keywords):
 # --- APIキーの設定 ---
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-model = genai.GenerativeModel("models/gemini-1.5-flash")
+
+# ✅ 修正版：現行API対応
+model = genai.GenerativeModel("gemini-1.5-flash-latest")
 
 # --- CSV読み込み ---
 csv_path = "politicians.csv"
@@ -219,3 +221,4 @@ if st.button("📡 検索して分析"):
 
             st.markdown(f"[🔗 会議録を見る]({s.get('meetingURL', '#')})")
             st.markdown("---")
+
